@@ -3,12 +3,13 @@ from my_agent.utils.tools import tools
 from langgraph.prebuilt import ToolNode
 from langchain_ollama import ChatOllama
 from my_agent.utils.pydantic_classes import is_given_stentence_a_question, lead_details
-from my_agent.utils.prompts import system_prompt, question_classifier_prompt, lead_details_extractor_prompt
+from my_agent.utils.prompts import system_prompt, question_classifier_prompt, lead_details_extractor_prompt, system_prompt_with_tools, system_prompt_with_tools_1
 from langgraph.graph import StateGraph, END
 from typing import Literal
 from my_agent.utils.agent_ui_utilities import get_human_feedback
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.messages import SystemMessage
+from my_agent.utils.general_utilities import is_valid_name, is_valid_email, is_valid_phone
 
 @lru_cache(maxsize=4)
 def _get_model():
@@ -63,31 +64,117 @@ def call_model(state):
         state['messages'] = [response]
         return state
 
+def call_model_with_tools(state):
+    messages = state["messages"]
+    messages = [SystemMessage(content=system_prompt_with_tools)] + messages
+    model = _get_model_with_tools()  # Changed from _get_model to bind tools
+    response = model.invoke(messages)
+    print(response)
+
+    # Check for summary
+    if "[Trip Summary]" in response.content:
+        print("Summary found in the response")
+        structured_llm = model.with_structured_output(lead_details)
+        prompt = lead_details_extractor_prompt.invoke({"input": response.content})
+        structured_output = structured_llm.invoke(prompt)
+        print("Structured Output for lead details: ", structured_output)
+        state["lead_details"] = structured_output
+        state["phase1_conversation_complete"] = True
+        state["messages"] = state["messages"] + [response]
+        return state
+
+    # Otherwise, check if follow-up question is needed
+    print("No summary found in the response")
+    content_lower = response.content.lower()
+    should_ask_question = (
+        "?" in response.content or
+        any(phrase in content_lower for phrase in [
+            "need to know", "please specify", "can you tell me",
+            "what", "which", "unclear", "missing", "please provide"
+        ])
+    )
+
+    if should_ask_question:
+        print("Making a forced tool call to ask user a question")
+        tool_response = AIMessage(
+            content="I need more information to continue.",
+            tool_calls=[
+                {
+                    "name": "human_assistance",
+                    "args": {"query": response.content.strip()},
+                    "id": "forced_call_1"
+                }
+            ]
+        )
+        state["messages"] = state["messages"] + [tool_response]
+        state["phase1_conversation_complete"] = False
+        return state
+
+    # If no summary and not a question, just proceed with the raw response
+    state["messages"] = state["messages"] + [response]
+    state["phase1_conversation_complete"] = False
+    return state
+
+
 def should_continue_phase1_conversation(state) -> str:
     """
     This function is used to determine if the agent should continue the conversation or not.
     """
     print("state: ", state)
     if state.get("phase1_conversation_complete") is True:
-        return "collect_user_details"
+        return "collect_user_name"
     else:
         return "end"
 
-def collect_user_details(state):
-    print("Collecting user details node called")
-    # collect the users name, email, phone number to create a lead
-    # ask for user's name
+def collect_user_name(state):
+    print("Collecting user name node called")
     print("state: ", state)
-    state["messages"].append(AIMessage(content="Entered the collect_user_details node"))
-    name = get_human_feedback(query="Can you please provide your name?")
-    print("type of name:", type(name))
-    state["user_name"] = name
-    email = get_human_feedback(query="Can you please provide your email?")
-    state["user_email"] = email
-    phone = get_human_feedback(query="Can you please provide your phone number?")
-    state["user_phone"] = phone
-    print("User details collected: ", name, email, phone)
-    # create a lead with the user details
-    # lead = create_lead(state["user_name"], state["user_email"], state["user_phone"])
-    print("exiting collect_user_details node")
+    
+    while True:
+        name = get_human_feedback(query="Can you please provide your name?")
+        if is_valid_name(name):
+            state["user_name"] = name.strip()
+            print("Valid name received:", name)
+            break
+        else:
+            state["messages"].append(AIMessage(content="Invalid name, please try again"))
+    
+    print("exiting collect_user_name node")
     return state
+
+
+def collect_user_email(state):
+    print("Collecting user email node called")
+    print("state: ", state)
+    while True:
+        email = get_human_feedback(query="Can you please provide your email?")
+        if is_valid_email(email):
+            state["user_email"] = email.strip()
+            print("Valid email received:", email)
+            break
+        else:
+            state["messages"].append(AIMessage(content="Invalid email, please try again"))
+    print("exiting collect_user_email node")
+    return state
+
+def collect_user_phone(state):
+    print("Collecting user phone node called")
+    print("state: ", state)
+    while True:
+        phone = get_human_feedback(query="Can you please provide your phone number?")
+        if is_valid_phone(phone):
+            print("Valid phone number received:", phone.strip())
+            state["user_phone"] = phone.strip()
+            break
+        else:
+            state["messages"].append(AIMessage(content="Invalid phone number, please try again"))
+    print("exiting collect_user_phone node")
+    return state
+
+tools_node = ToolNode(tools)
+
+def tools_router(state):
+    last_msg = state["messages"][-1]
+    if hasattr(last_msg, "tool_calls") and len(last_msg.tool_calls) > 0:
+        return "action"
+    return "collect_user_name"

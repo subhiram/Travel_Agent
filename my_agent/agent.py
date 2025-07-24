@@ -1,7 +1,7 @@
 from typing import TypedDict, Literal
 
 from langgraph.graph import StateGraph, END
-from my_agent.utils.nodes import call_model, collect_user_details, should_continue_phase1_conversation
+from my_agent.utils.nodes import call_model, collect_user_name, collect_user_email, collect_user_phone, should_continue_phase1_conversation, call_model_with_tools, tools_node, tools_router
 from my_agent.utils.state import AgentState
 
 
@@ -9,23 +9,27 @@ from my_agent.utils.state import AgentState
 workflow = StateGraph(AgentState)
 
 # Define the two nodes we will cycle between
-workflow.add_node("agent", call_model)
-workflow.add_node("collect_user_details", collect_user_details)
-# workflow.add_node("action", tool_node)
+workflow.add_node("agent", call_model_with_tools)
+workflow.add_node("collect_user_name", collect_user_name)
+workflow.add_node("collect_user_email", collect_user_email)
+workflow.add_node("collect_user_phone", collect_user_phone)
+workflow.add_node("action", tools_node)
 
 # Set the entrypoint as `agent`
 # This means that this node is the first one called
 workflow.set_entry_point("agent")
-# workflow.add_edge("agent", "collect_user_details")
 workflow.add_conditional_edges(
     "agent",
-    should_continue_phase1_conversation,
+    tools_router,
     {
-        "collect_user_details": "collect_user_details",
-        "end": END,
-    },
+        "action": "action",
+        "collect_user_name": "collect_user_name"
+    }
 )
-workflow.add_edge("collect_user_details", END)
+workflow.add_edge("action", "agent")
+workflow.add_edge("collect_user_name", "collect_user_email")
+workflow.add_edge("collect_user_email", "collect_user_phone")
+workflow.add_edge("collect_user_phone", END)
 
 # We now add a conditional edge
 # workflow.add_conditional_edges(
