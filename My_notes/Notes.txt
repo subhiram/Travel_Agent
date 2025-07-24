@@ -1,0 +1,22 @@
+This is a Travel Agent application
+
+1. This agent should be intelligent enough to get the required specifics from the user and further it should be able to suggest and encourage user to select
+destinations based on the initial question of the user. Further it should be able to create a lead in the system and it should be able to give out 
+more options for the travel packages and further give out travel quotations
+
+
+First for creating a lead in the system, these are the list of details needed
+1. The name of the user
+2. Mobile number of the user
+3. service_type  eg:"Package Tour"
+4. Travel date
+5. no of adults 
+
+
+
+Stage1: (lead creation and intent understanding)
+
+This is how the structured output would look like for now, do we need any changes for this (anything to add)
+Structured Output for lead details:  destination='London' travel_date='August this year' duration=4 number_of_adults=1 number_of_children=0 travel_type='International'
+
+Structured Output for lead details:  destination='London' travel_date='August 12th to August 20th' duration=9 number_of_adults=1 number_of_children=0 travel_type='International'
