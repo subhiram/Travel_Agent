@@ -167,7 +167,8 @@ def collect_user_phone(state):
             state["user_phone"] = phone.strip()
             break
         else:
-            state["messages"].append(AIMessage(content="Invalid phone number, please try again"))
+            pass
+            # state["messages"].append(AIMessage(content="Invalid phone number, please try again"))
     print("exiting collect_user_phone node")
     return state
 
@@ -178,3 +179,88 @@ def tools_router(state):
     if hasattr(last_msg, "tool_calls") and len(last_msg.tool_calls) > 0:
         return "action"
     return "collect_user_name"
+    
+# add a node to create a lead in the database and capture the lead id
+
+# To do 
+
+# in the system prompt edit it in such a way that we are able to collect the starting location details
+# also make sure the user gives the correct dates (not just the vague details like month or year)
+
+
+# afeter collecting the user specific details the name, email and mobile number, we need to collect the following details
+# 1. Package Type (eg. Full Package (Flights + Land), only flights, only land)
+# 2. Flight Preferences (eg. Class, Economy, Business, First)
+# 3. Accommodation Preferences (eg. Star Category, 2-star, 3-star, 4-star, 5-star)
+# 4. Location Preference (eg. central london, outskirts)
+# 5. Interests / Activities (eg. sightseeing, shopping, food, etc.)
+
+
+# ----------- starting some sandbox code 
+
+# def ask_human_node(state):
+#     print("ask_human_node called")
+#     print("state: ", state)
+
+#     messages = state.get("messages", [])
+#     last_message = messages[-1] if messages else None
+
+#     if isinstance(last_message, AIMessage):
+#         tool_calls = last_message.tool_calls or []
+
+#         for tool_call in tool_calls:
+#             if tool_call["name"] == "human_assistance":
+#                 query = tool_call.get("args", {}).get("query", "Please provide input.")
+#                 user_input = get_human_feedback(query=query)
+#                 print("user_input: ", user_input)
+
+#                 # Append user response as a HumanMessage
+#                 messages.append(HumanMessage(content=user_input))
+
+#                 state["messages"] = messages
+#                 state["phase1_conversation_complete"] = False
+#                 return state
+
+#         print("No 'human_assistance' tool_call found in last AIMessage.")
+#         return state
+
+#     print("Last message is not an AIMessage.")
+#     return state
+
+def ask_human_node(state):
+    print("ask_human_node called")
+    print("state: ", state)
+
+    messages = state.get("messages", [])
+    last_message = messages[-1] if messages else None
+
+    if isinstance(last_message, AIMessage):
+        print("Last message is an AIMessage.")
+        print("last_message: ", last_message)
+        # user_input = get_human_feedback(query=last_message.content)
+        # print("user_input: ", user_input)
+        # state["messages"].append(HumanMessage(content=user_input))
+        # state["phase1_conversation_complete"] = False
+        return interrupt(
+            HumanInterrupt(
+                action_request={
+                    "action": "Human",
+                    "args": {"question": last_message.content}
+                },
+                config={
+                    "allow_ignore": False,
+                    "allow_respond": True,
+                    "allow_edit": False,
+                    "allow_accept": False,
+                }
+            )
+        )
+        return state
+
+    print("Last message is not an AIMessage.")
+    return state
+
+
+
+
+# ----------- ending some sandbox code 
